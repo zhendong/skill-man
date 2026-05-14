@@ -68,8 +68,10 @@ def show_stats(days: int = 30, skill: str | None = None) -> None:
 
     state = load_state()
     # Claude Code identifies a skill by its folder name in the agent's
-    # discovery dir, which is exactly our state key. Match against that.
-    managed_keys = set(state.get("skills", {}).keys())
+    # discovery dir, which is exactly our state key. Disabled skills have
+    # no symlink, so they aren't "managed" for stats purposes.
+    managed_keys = {k for k, info in state.get("skills", {}).items()
+                    if info.get("enabled", True)}
 
     if not events:
         print(f"(no skill invocations in the last {days} days)")

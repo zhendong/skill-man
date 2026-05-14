@@ -31,10 +31,6 @@ def _detect_type(url: str) -> str:
 
 
 def canonicalize_url(url: str) -> str:
-    """Canonical identity for a source: scheme stripped, trailing slash and
-    `.git` removed, host lowercased. SCP-style SSH and HTTPS forms collapse
-    to the same string. Local paths become absolute paths.
-    """
     s = url.strip()
     p = _is_existing_local(s)
     if p is not None:
@@ -58,15 +54,6 @@ def canonicalize_url(url: str) -> str:
 
 
 def _apply_github_mirror(url: str) -> str:
-    """Rewrite a github.com URL through SKILL_MAN_GITHUB_MIRROR if set.
-
-    Two modes, auto-detected:
-    - prefix mode (mirror contains `://`): `https://ghproxy.com/` →
-      `https://ghproxy.com/https://github.com/o/r`
-    - host-swap mode (bare host): `kgithub.com` →
-      `https://kgithub.com/o/r`
-    Non-github URLs and local paths are returned untouched.
-    """
     mirror = os.environ.get("SKILL_MAN_GITHUB_MIRROR", "").strip()
     if not mirror:
         return url
@@ -99,24 +86,67 @@ def resolve_to_key(name_or_url: str) -> str | None:
     return None
 
 
-def add_source(url: str, ref: str = "main", auto_sync: bool = True) -> str:
+def _rollback_source(key: str) -> None:
+    state = load_state()
+    state["sources"].pop(key, None)
+    for sk in [k for k, info in state["skills"].items() if info.get("source") == key]:
+        del state["skills"][sk]
+    save_state(state)
+    disk = source_dir_for(key)
+    if disk.is_symlink():
+        disk.unlink()
+    elif disk.exists():
+        shutil.rmtree(disk)
+
+
+def add_source(url: str, ref: str = "main", only: list[str] | None = None,
+               auto_sync: bool = True) -> str:
     state = load_state()
     key = canonicalize_url(url)
     if key in state["sources"]:
         raise SystemExit(f"source already added: {key} (stored as {state['sources'][key]['url']})")
     detected = _detect_type(url)
     stored_url = str(expand(url)) if _is_existing_local(url) is not None else url
-    state["sources"][key] = {"type": detected, "url": stored_url, "ref": ref}
+    record = {"type": detected, "url": stored_url, "ref": ref}
+    state["sources"][key] = record
     save_state(state)
     print(f"added source {key} ({detected})")
     print(f"  clone url: {stored_url}")
     print(f"  on disk:   {source_dir_for(key)}")
-    if auto_sync:
-        from .sync import sync_source
-        from .links import refresh_links
-        print()
+    if not auto_sync:
+        return key
+
+    from .sync import sync_source
+    from .links import refresh_links
+    print()
+    try:
         sync_source(key)
-        refresh_links()
+    except BaseException:
+        _rollback_source(key)
+        raise
+
+    if only:
+        only = sorted(set(only))
+        state = load_state()
+        available = sorted({info["slug"] for info in state["skills"].values()
+                            if info.get("source") == key})
+        missing = [s for s in only if s not in available]
+        if missing:
+            _rollback_source(key)
+            raise SystemExit(
+                f"skill(s) not found in source {key}: {', '.join(missing)}\n"
+                f"available: {', '.join(available) or '(none)'}"
+            )
+        for sk, info in state["skills"].items():
+            if info.get("source") == key:
+                info["enabled"] = info["slug"] in only
+        save_state(state)
+        disabled = [s for s in available if s not in only]
+        print(f"\nenabled: {', '.join(only)}")
+        if disabled:
+            print(f"disabled: {', '.join(disabled)}")
+
+    refresh_links()
     return key
 
 
@@ -149,10 +179,10 @@ def list_sources() -> None:
         if i:
             print()
         print(key)
-        print(f"  type:  {info['type']}")
-        print(f"  clone: {info['url']}")
-        print(f"  ref:   {info.get('ref', 'main')}")
-        print(f"  dir:   {source_dir_for(key)}")
+        print(f"  type:   {info['type']}")
+        print(f"  clone:  {info['url']}")
+        print(f"  ref:    {info.get('ref', 'main')}")
+        print(f"  dir:    {source_dir_for(key)}")
 
 
 def fetch_source(key: str, info: dict) -> tuple[Path, str]:

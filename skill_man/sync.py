@@ -97,6 +97,7 @@ def sync_source(key: str) -> list[str]:
             "commit": commit,
             "installed_at": (existing or {}).get("installed_at", now),
             "updated_at": now,
+            "enabled": (existing or {}).get("enabled", True),
         }
         discovered.append(state_key)
         print(f"  - {state_key}")

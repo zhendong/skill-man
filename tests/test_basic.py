@@ -317,6 +317,153 @@ def test_install_hook_write_idempotent_and_safe():
         assert settings_path.read_text() == "not json {{{"
 
 
+def test_source_add_with_skill_whitelist():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        env = {
+            "SKILL_MAN_ROOT": str(tmp / "state"),
+            "SKILL_MAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
+        }
+        repo = make_repo(tmp / "repo", {
+            "alpha": ("alpha", "a"),
+            "beta": ("beta", "b"),
+            "gamma": ("gamma", "g"),
+        })
+
+        # Add with whitelist of two; the third is discovered but disabled
+        r = run("source", "add", str(repo), "alpha,beta", env=env)
+        assert r.returncode == 0, r.stderr
+        assert "enabled: alpha, beta" in r.stdout
+        assert "disabled: gamma" in r.stdout
+
+        state = json.loads((tmp / "state" / "state.json").read_text())
+        rows = {info["slug"]: info["enabled"] for info in state["skills"].values()}
+        assert rows == {"alpha": True, "beta": True, "gamma": False}
+
+        # Only enabled skills have symlinks
+        agents = tmp / "a"
+        suf = next(iter(state["skills"])).rsplit("-", 1)[1]
+        assert (agents / f"alpha-{suf}").is_symlink()
+        assert (agents / f"beta-{suf}").is_symlink()
+        assert not (agents / f"gamma-{suf}").exists()
+
+        # Re-sync preserves the enabled flags
+        r = run("sync", env=env)
+        assert r.returncode == 0, r.stderr
+        state = json.loads((tmp / "state" / "state.json").read_text())
+        rows = {info["slug"]: info["enabled"] for info in state["skills"].values()}
+        assert rows == {"alpha": True, "beta": True, "gamma": False}
+
+
+def test_source_add_validates_skill_names_and_rolls_back():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        env = {
+            "SKILL_MAN_ROOT": str(tmp / "state"),
+            "SKILL_MAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
+        }
+        repo = make_repo(tmp / "repo", {"alpha": ("alpha", "a")})
+
+        r = run("source", "add", str(repo), "alpha,bogus", env=env)
+        assert r.returncode != 0
+        assert "not found in source" in r.stderr
+        assert "bogus" in r.stderr
+        assert "available: alpha" in r.stderr
+
+        # State must be empty — no source, no skills, no clone left behind
+        state = json.loads((tmp / "state" / "state.json").read_text())
+        assert state["sources"] == {}
+        assert state["skills"] == {}
+        assert not (tmp / "state" / "sources").exists() or \
+               not any((tmp / "state" / "sources").iterdir())
+
+
+def test_enable_disable_toggles_state_and_symlink():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        env = {
+            "SKILL_MAN_ROOT": str(tmp / "state"),
+            "SKILL_MAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
+        }
+        repo = make_repo(tmp / "repo", {"foo": ("foo", "f"), "bar": ("bar", "b")})
+        r = run("source", "add", str(repo), env=env)
+        assert r.returncode == 0, r.stderr
+
+        state = json.loads((tmp / "state" / "state.json").read_text())
+        foo_key = next(k for k, info in state["skills"].items() if info["slug"] == "foo")
+
+        # both symlinks present
+        for d in (tmp / "a", tmp / "c"):
+            assert (d / foo_key).is_symlink()
+
+        # disable by slug
+        r = run("disable", "foo", env=env)
+        assert r.returncode == 0, r.stderr
+        state = json.loads((tmp / "state" / "state.json").read_text())
+        assert state["skills"][foo_key]["enabled"] is False
+        for d in (tmp / "a", tmp / "c"):
+            assert not (d / foo_key).exists()
+
+        # idempotent
+        r = run("disable", "foo", env=env)
+        assert r.returncode == 0, r.stderr
+        assert "already disabled" in r.stdout
+
+        # sync preserves disabled
+        r = run("sync", env=env)
+        assert r.returncode == 0, r.stderr
+        state = json.loads((tmp / "state" / "state.json").read_text())
+        assert state["skills"][foo_key]["enabled"] is False
+        for d in (tmp / "a", tmp / "c"):
+            assert not (d / foo_key).exists()
+
+        # enable by state key
+        r = run("enable", foo_key, env=env)
+        assert r.returncode == 0, r.stderr
+        state = json.loads((tmp / "state" / "state.json").read_text())
+        assert state["skills"][foo_key]["enabled"] is True
+        for d in (tmp / "a", tmp / "c"):
+            assert (d / foo_key).is_symlink()
+
+        # unknown skill errors
+        r = run("disable", "nonexistent", env=env)
+        assert r.returncode != 0
+
+
+def test_stats_excludes_disabled_from_managed():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        env = {
+            "SKILL_MAN_ROOT": str(tmp / "state"),
+            "SKILL_MAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
+        }
+        repo = make_repo(tmp / "repo", {"x": ("x", "x"), "y": ("y", "y")})
+        r = run("source", "add", str(repo), "x", env=env)
+        assert r.returncode == 0, r.stderr
+        # x is enabled, y is disabled
+        # Fire a hook event for y (the disabled one) — should show as `*`
+        state = json.loads((tmp / "state" / "state.json").read_text())
+        y_key = next(k for k, info in state["skills"].items() if info["slug"] == "y")
+
+        r = subprocess.run(
+            [sys.executable, "-m", "skill_man", "hook"],
+            input=json.dumps({"tool_name": "Skill",
+                              "tool_input": {"skill": y_key},
+                              "session_id": "S1"}),
+            capture_output=True, text=True,
+            env={**os.environ, **env},
+        )
+        assert r.returncode == 0, r.stderr
+
+        r = run("stats", "--days", "1", env=env)
+        assert r.returncode == 0, r.stderr
+        # `managed skills` should be 1, not 2 (disabled is excluded)
+        assert "managed skills:           1" in r.stdout
+        # y should appear with `*` (unmanaged from stats' POV)
+        y_line = next(l for l in r.stdout.splitlines() if y_key in l and "COUNT" not in l)
+        assert y_line.startswith("*"), f"disabled skill should be marked unmanaged: {y_line!r}"
+
+
 def test_dirs_created_on_demand():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -338,6 +485,10 @@ if __name__ == "__main__":
     test_url_canonicalization()
     test_github_mirror_rewriting()
     test_duplicate_url_rejected()
+    test_source_add_with_skill_whitelist()
+    test_source_add_validates_skill_names_and_rolls_back()
+    test_enable_disable_toggles_state_and_symlink()
+    test_stats_excludes_disabled_from_managed()
     test_dirs_created_on_demand()
     test_hook_records_and_stats_identifies_managed()
     test_install_hook_write_idempotent_and_safe()

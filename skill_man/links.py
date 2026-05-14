@@ -35,7 +35,8 @@ def _points_into_sources(link: Path) -> bool:
 
 def refresh_links() -> None:
     state = load_state()
-    managed = set(state.get("skills", {}).keys())
+    enabled_keys = {k for k, info in state.get("skills", {}).items()
+                    if info.get("enabled", True)}
     dirs = [ensure(d) for d in target_dirs()]
 
     n_stale = 0
@@ -45,13 +46,13 @@ def refresh_links() -> None:
                 continue
             if not _points_into_sources(entry):
                 continue
-            if entry.name not in managed:
+            if entry.name not in enabled_keys:
                 entry.unlink()
                 n_stale += 1
 
     n_ok = 0
     n_skip = 0
-    for state_key in managed:
+    for state_key in enabled_keys:
         info = state["skills"][state_key]
         target = skill_path(info)
         if not target.exists():
