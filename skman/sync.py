@@ -119,7 +119,7 @@ def sync_source(key: str) -> list[str]:
 def sync_all() -> list[str]:
     state = load_state()
     if not state["sources"]:
-        print("(no sources configured; add one with `skill-man source add`)")
+        print("(no sources configured; add one with `skman source add`)")
         return []
     all_keys: list[str] = []
     for src_key in list(state["sources"].keys()):

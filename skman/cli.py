@@ -42,7 +42,7 @@ def cmd_list(args):
     state = load_state()
     skills = state.get("skills", {})
     if not skills:
-        print("(no skills; add a source and run `skill-man sync`)")
+        print("(no skills; add a source and run `skman sync`)")
         return
     rows = []
     for state_key, info in sorted(skills.items()):
@@ -119,7 +119,7 @@ def cmd_paths(args):
 def cmd_install_hook(args):
     entry = {
         "matcher": "Skill",
-        "hooks": [{"type": "command", "command": "skill-man hook"}],
+        "hooks": [{"type": "command", "command": "skman hook"}],
     }
     if args.write:
         settings = Path("~/.claude/settings.json").expanduser()
@@ -137,7 +137,7 @@ def cmd_install_hook(args):
         pre = hooks.setdefault("PreToolUse", [])
         already = any(
             e.get("matcher") == "Skill"
-            and any(h.get("command") == "skill-man hook" for h in e.get("hooks", []))
+            and any(h.get("command") == "skman hook" for h in e.get("hooks", []))
             for e in pre
         )
         if already:
@@ -149,17 +149,17 @@ def cmd_install_hook(args):
     else:
         print(json.dumps({"hooks": {"PreToolUse": [entry]}}, indent=2))
         print("\nMerge the above into ~/.claude/settings.json,")
-        print("or run `skill-man install-hook --write` to do it automatically.")
+        print("or run `skman install-hook --write` to do it automatically.")
 
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
-        prog="skill-man",
+        prog="skman",
         description="Manage and sync coding-agent skills.",
     )
     sp = ap.add_subparsers(dest="cmd", required=True)
 
-    sp.add_parser("paths", help="print on-disk paths used by skill-man").set_defaults(func=cmd_paths)
+    sp.add_parser("paths", help="print on-disk paths used by skman").set_defaults(func=cmd_paths)
 
     src = sp.add_parser("source", help="manage skill sources").add_subparsers(dest="sub", required=True)
     p = src.add_parser("add", help="register a git URL or local dir as a source")

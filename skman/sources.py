@@ -54,7 +54,7 @@ def canonicalize_url(url: str) -> str:
 
 
 def _apply_github_mirror(url: str) -> str:
-    mirror = os.environ.get("SKILL_MAN_GITHUB_MIRROR", "").strip()
+    mirror = os.environ.get("SKMAN_GITHUB_MIRROR", "").strip()
     if not mirror:
         return url
     m = re.match(r"^[\w.+-]+@github\.com:(.*)$", url, re.IGNORECASE)
@@ -173,7 +173,7 @@ def remove_source(name_or_url: str) -> None:
 def list_sources() -> None:
     state = load_state()
     if not state["sources"]:
-        print("(no sources; add one with `skill-man source add <url>`)")
+        print("(no sources; add one with `skman source add <url>`)")
         return
     for i, (key, info) in enumerate(state["sources"].items()):
         if i:

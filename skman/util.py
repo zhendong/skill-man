@@ -11,7 +11,7 @@ HOME = Path.home()
 
 
 def root() -> Path:
-    return Path(os.environ.get("SKILL_MAN_ROOT", HOME / ".skill-man"))
+    return Path(os.environ.get("SKMAN_ROOT", HOME / ".skman"))
 
 
 def sources_dir() -> Path:

@@ -16,7 +16,7 @@ def run(*args, env=None):
     if env:
         e.update(env)
     return subprocess.run(
-        [sys.executable, "-m", "skill_man", *args],
+        [sys.executable, "-m", "skman", *args],
         capture_output=True, text=True, env=e, cwd=ROOT,
     )
 
@@ -42,7 +42,7 @@ def _canonical_local(p: Path) -> str:
 
 
 def _suffix_for(canonical: str) -> str:
-    from skill_man.util import source_short_id
+    from skman.util import source_short_id
     return source_short_id(canonical)
 
 
@@ -53,8 +53,8 @@ def test_end_to_end_with_auto_sync_and_suffixed_links():
         claude_dir = tmp / "claude" / "skills"
         state_root = tmp / "state"
         env = {
-            "SKILL_MAN_ROOT": str(state_root),
-            "SKILL_MAN_TARGET_DIRS": f"{agents_dir}:{claude_dir}",
+            "SKMAN_ROOT": str(state_root),
+            "SKMAN_TARGET_DIRS": f"{agents_dir}:{claude_dir}",
         }
 
         repo_a = make_repo(tmp / "repo-a", {
@@ -139,8 +139,8 @@ def test_end_to_end_with_auto_sync_and_suffixed_links():
 
 
 def test_url_canonicalization():
-    from skill_man.sources import canonicalize_url
-    from skill_man.util import source_dir_for
+    from skman.sources import canonicalize_url
+    from skman.util import source_dir_for
     variants = [
         "https://github.com/obra/superpowers",
         "https://github.com/obra/superpowers.git",
@@ -156,7 +156,7 @@ def test_url_canonicalization():
 
 
 def test_github_mirror_rewriting():
-    from skill_man.sources import _apply_github_mirror
+    from skman.sources import _apply_github_mirror
     cases_host_swap = [
         ("https://github.com/obra/superpowers.git",        "kgithub.com",            "https://kgithub.com/obra/superpowers.git"),
         ("https://GITHUB.com/obra/superpowers",            "kgithub.com",            "https://kgithub.com/obra/superpowers"),
@@ -167,17 +167,17 @@ def test_github_mirror_rewriting():
         ("git@github.com:obra/superpowers.git",            "https://ghproxy.com/",   "https://ghproxy.com/https://github.com/obra/superpowers.git"),
     ]
     for input_url, mirror, want in cases_host_swap + cases_prefix:
-        os.environ["SKILL_MAN_GITHUB_MIRROR"] = mirror
+        os.environ["SKMAN_GITHUB_MIRROR"] = mirror
         got = _apply_github_mirror(input_url)
         assert got == want, f"in={input_url} mirror={mirror} got={got} want={want}"
 
     # Non-github URLs untouched
-    os.environ["SKILL_MAN_GITHUB_MIRROR"] = "kgithub.com"
+    os.environ["SKMAN_GITHUB_MIRROR"] = "kgithub.com"
     assert _apply_github_mirror("https://gitlab.com/x/y") == "https://gitlab.com/x/y"
     assert _apply_github_mirror("/local/path") == "/local/path"
 
     # No mirror configured -> untouched
-    os.environ.pop("SKILL_MAN_GITHUB_MIRROR", None)
+    os.environ.pop("SKMAN_GITHUB_MIRROR", None)
     assert _apply_github_mirror("https://github.com/x/y.git") == "https://github.com/x/y.git"
 
 
@@ -185,8 +185,8 @@ def test_duplicate_url_rejected():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         env = {
-            "SKILL_MAN_ROOT": str(tmp / "state"),
-            "SKILL_MAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
+            "SKMAN_ROOT": str(tmp / "state"),
+            "SKMAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
         }
         repo = make_repo(tmp / "r", {"x": ("x", "x")})
         r = run("source", "add", str(repo), env=env)
@@ -205,8 +205,8 @@ def test_hook_records_and_stats_identifies_managed():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         env = {
-            "SKILL_MAN_ROOT": str(tmp / "state"),
-            "SKILL_MAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
+            "SKMAN_ROOT": str(tmp / "state"),
+            "SKMAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
         }
         repo = make_repo(tmp / "repo", {"brainstorming": ("brainstorming", "explore")})
         r = run("source", "add", str(repo), env=env)
@@ -219,7 +219,7 @@ def test_hook_records_and_stats_identifies_managed():
 
         def fire(payload: str):
             r = subprocess.run(
-                [sys.executable, "-m", "skill_man", "hook"],
+                [sys.executable, "-m", "skman", "hook"],
                 input=payload, capture_output=True, text=True,
                 env={**os.environ, **env},
             )
@@ -280,7 +280,7 @@ def test_install_hook_write_idempotent_and_safe():
         home = tmp / "home"
         env = {
             "HOME": str(home),
-            "SKILL_MAN_ROOT": str(tmp / "state"),
+            "SKMAN_ROOT": str(tmp / "state"),
         }
         # First write
         r = run("install-hook", "--write", env=env)
@@ -321,8 +321,8 @@ def test_source_add_with_skill_whitelist():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         env = {
-            "SKILL_MAN_ROOT": str(tmp / "state"),
-            "SKILL_MAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
+            "SKMAN_ROOT": str(tmp / "state"),
+            "SKMAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
         }
         repo = make_repo(tmp / "repo", {
             "alpha": ("alpha", "a"),
@@ -359,8 +359,8 @@ def test_source_add_validates_skill_names_and_rolls_back():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         env = {
-            "SKILL_MAN_ROOT": str(tmp / "state"),
-            "SKILL_MAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
+            "SKMAN_ROOT": str(tmp / "state"),
+            "SKMAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
         }
         repo = make_repo(tmp / "repo", {"alpha": ("alpha", "a")})
 
@@ -382,8 +382,8 @@ def test_enable_disable_toggles_state_and_symlink():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         env = {
-            "SKILL_MAN_ROOT": str(tmp / "state"),
-            "SKILL_MAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
+            "SKMAN_ROOT": str(tmp / "state"),
+            "SKMAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
         }
         repo = make_repo(tmp / "repo", {"foo": ("foo", "f"), "bar": ("bar", "b")})
         r = run("source", "add", str(repo), env=env)
@@ -434,8 +434,8 @@ def test_stats_excludes_disabled_from_managed():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         env = {
-            "SKILL_MAN_ROOT": str(tmp / "state"),
-            "SKILL_MAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
+            "SKMAN_ROOT": str(tmp / "state"),
+            "SKMAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
         }
         repo = make_repo(tmp / "repo", {"x": ("x", "x"), "y": ("y", "y")})
         r = run("source", "add", str(repo), "x", env=env)
@@ -446,7 +446,7 @@ def test_stats_excludes_disabled_from_managed():
         y_key = next(k for k, info in state["skills"].items() if info["slug"] == "y")
 
         r = subprocess.run(
-            [sys.executable, "-m", "skill_man", "hook"],
+            [sys.executable, "-m", "skman", "hook"],
             input=json.dumps({"tool_name": "Skill",
                               "tool_input": {"skill": y_key},
                               "session_id": "S1"}),
@@ -468,8 +468,8 @@ def test_dirs_created_on_demand():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         env = {
-            "SKILL_MAN_ROOT": str(tmp / "fresh"),
-            "SKILL_MAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'b'}",
+            "SKMAN_ROOT": str(tmp / "fresh"),
+            "SKMAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'b'}",
         }
         assert not (tmp / "fresh").exists()
         repo = make_repo(tmp / "repo", {"sk1": ("sk1", "first")})

@@ -50,7 +50,7 @@ def hook_entrypoint() -> None:
 def show_stats(days: int = 30, skill: str | None = None) -> None:
     log = usage_log()
     if not log.exists():
-        print("(no usage data yet — install the hook with `skill-man install-hook --write`)")
+        print("(no usage data yet — install the hook with `skman install-hook --write`)")
         return
     cutoff = time.time() - days * 86400
     events = []
@@ -95,7 +95,7 @@ def show_stats(days: int = 30, skill: str | None = None) -> None:
             marker = " " if sk in managed_keys else "*"
             print(f"{marker}{sk:<{width}} {n:>6} {len(sessions[sk]):>9}  {last}")
         if any(sk not in managed_keys for sk in counts):
-            print("\n  * = invoked but not managed by skill-man")
+            print("\n  * = invoked but not managed by skman")
 
     if managed_keys:
         invoked = {e.get("skill") for e in events}

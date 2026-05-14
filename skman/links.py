@@ -10,9 +10,9 @@ def target_dirs() -> list[Path]:
     """Where managed skills get symlinked.
 
     Defaults to ~/.agents/skills and ~/.claude/skills. Override with the
-    SKILL_MAN_TARGET_DIRS env var (colon-separated); used by tests.
+    SKMAN_TARGET_DIRS env var (colon-separated); used by tests.
     """
-    override = os.environ.get("SKILL_MAN_TARGET_DIRS")
+    override = os.environ.get("SKMAN_TARGET_DIRS")
     if override:
         return [Path(p).expanduser() for p in override.split(":") if p]
     return [
