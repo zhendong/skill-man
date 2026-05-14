@@ -1,0 +1,16 @@
+[project]
+name = "skill-man"
+version = "0.1.0"
+description = "Manage and sync coding-agent skills with pluggable user patches"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+skill-man = "skill_man.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["skill_man"]
