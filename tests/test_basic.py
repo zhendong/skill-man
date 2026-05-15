@@ -464,6 +464,115 @@ def test_stats_excludes_disabled_from_managed():
         assert y_line.startswith("*"), f"disabled skill should be marked unmanaged: {y_line!r}"
 
 
+def test_local_source_with_relative_path_resolves_to_abs():
+    """Regression: `skman source add .` from inside a source dir must store the
+    resolved absolute path. Otherwise the symlink under ~/.skman/sources/<hash>/
+    points to '.' (i.e. ~/.skman/sources/ itself), which makes sync rglob into
+    every other source's SKILL.md and register hundreds of phantom skills.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        env = {
+            "SKMAN_ROOT": str(tmp / "state"),
+            "SKMAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
+        }
+        # A pre-existing source whose skills must NOT leak into the new add.
+        repo = make_repo(tmp / "other-repo", {"alpha": ("alpha", "a")})
+        r = run("source", "add", str(repo), env=env)
+        assert r.returncode == 0, r.stderr
+
+        # Single-skill local source: SKILL.md at the root, no skills/ wrapper.
+        single = tmp / "equity-report"
+        single.mkdir()
+        (single / "SKILL.md").write_text(
+            "---\nname: equity-report\ndescription: x\n---\nbody\n"
+        )
+
+        e = os.environ.copy(); e.update(env)
+        e["PYTHONPATH"] = str(ROOT) + os.pathsep + e.get("PYTHONPATH", "")
+        r = subprocess.run(
+            [sys.executable, "-m", "skman", "source", "add", "."],
+            capture_output=True, text=True, env=e, cwd=single,
+        )
+        assert r.returncode == 0, r.stderr
+
+        state = json.loads((tmp / "state" / "state.json").read_text())
+        # stored URL must be the resolved abs path, not "."
+        rec = state["sources"][str(single.resolve())]
+        assert rec["url"] == str(single.resolve()), rec
+        # Only the new skill plus the pre-existing alpha — no hundreds of phantoms
+        slugs = sorted(info["slug"] for info in state["skills"].values())
+        assert slugs == ["alpha", "equity-report"], slugs
+
+
+def test_single_skill_source_uses_source_basename_as_slug():
+    """Regression: when a source IS a single skill (SKILL.md at the root, no
+    `skills/<name>/` wrapper), the slug must come from the source's URL
+    basename, not from the on-disk hash directory name.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        env = {
+            "SKMAN_ROOT": str(tmp / "state"),
+            "SKMAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
+        }
+        single = tmp / "equity-report"
+        single.mkdir()
+        (single / "SKILL.md").write_text(
+            "---\nname: equity-report\ndescription: x\n---\nbody\n"
+        )
+        r = run("source", "add", str(single), env=env)
+        assert r.returncode == 0, r.stderr
+
+        state = json.loads((tmp / "state" / "state.json").read_text())
+        assert len(state["skills"]) == 1
+        rec = next(iter(state["skills"].values()))
+        assert rec["slug"] == "equity-report", rec
+        # state key (= symlink name) starts with the slug, not a hash dir name
+        key = next(iter(state["skills"]))
+        assert key.startswith("equity-report-"), key
+
+
+def test_generic_skills_slug_falls_back():
+    """Regression: when a SKILL.md sits directly inside `<repo>/skills/` (no
+    per-skill subdir), or the source's basename is itself "skills", the would-be
+    slug is "skills" — generic and unhelpful. Prefer SKILL.md frontmatter
+    `name:` when it's filesystem-safe; else fall back to <parent>-skills.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        env = {
+            "SKMAN_ROOT": str(tmp / "state"),
+            "SKMAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
+        }
+
+        # Case 1: SKILL.md directly inside skills/ (no per-skill dir);
+        # safe frontmatter name → slug from name.
+        repo1 = tmp / "twittershots-repo"
+        (repo1 / "skills").mkdir(parents=True)
+        (repo1 / "skills" / "SKILL.md").write_text(
+            "---\nname: tweet-shots\ndescription: shoots tweets\n---\nbody\n"
+        )
+        r = run("source", "add", str(repo1), env=env)
+        assert r.returncode == 0, r.stderr
+        state = json.loads((tmp / "state" / "state.json").read_text())
+        slugs = {info["slug"] for info in state["skills"].values()}
+        assert "tweet-shots" in slugs and "skills" not in slugs, slugs
+
+        # Case 2: source itself is named "skills", SKILL.md at root, frontmatter
+        # `name` has spaces (unsafe for filesystem) → fall back to <parent>-skills.
+        repo2 = tmp / "twittershots" / "skills"
+        repo2.mkdir(parents=True)
+        (repo2 / "SKILL.md").write_text(
+            "---\nname: tweet shots\ndescription: x\n---\nbody\n"
+        )
+        r = run("source", "add", str(repo2), env=env)
+        assert r.returncode == 0, r.stderr
+        state = json.loads((tmp / "state" / "state.json").read_text())
+        slugs = {info["slug"] for info in state["skills"].values()}
+        assert "twittershots-skills" in slugs, slugs
+
+
 def test_dirs_created_on_demand():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -490,6 +599,9 @@ if __name__ == "__main__":
     test_enable_disable_toggles_state_and_symlink()
     test_stats_excludes_disabled_from_managed()
     test_dirs_created_on_demand()
+    test_local_source_with_relative_path_resolves_to_abs()
+    test_single_skill_source_uses_source_basename_as_slug()
+    test_generic_skills_slug_falls_back()
     test_hook_records_and_stats_identifies_managed()
     test_install_hook_write_idempotent_and_safe()
     test_end_to_end_with_auto_sync_and_suffixed_links()

@@ -37,6 +37,17 @@ def source_short_id(canonical_url: str) -> str:
     return _url_hash(canonical_url)[:6]
 
 
+def source_basename(canonical_url: str) -> str:
+    """Display-friendly basename of a source's canonical URL.
+
+    Used as the slug when a source ships a single skill at its root
+    (no `skills/<name>/` wrapper). E.g. `/Users/me/foo` -> `foo`,
+    `github.com/obra/superpowers` -> `superpowers`.
+    """
+    name = Path(canonical_url).name
+    return name or canonical_url
+
+
 def skill_state_key(slug: str, canonical_url: str) -> str:
     return f"{slug}-{source_short_id(canonical_url)}"
 

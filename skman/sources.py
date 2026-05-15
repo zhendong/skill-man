@@ -106,7 +106,7 @@ def add_source(url: str, ref: str = "main", only: list[str] | None = None,
     if key in state["sources"]:
         raise SystemExit(f"source already added: {key} (stored as {state['sources'][key]['url']})")
     detected = _detect_type(url)
-    stored_url = str(expand(url)) if _is_existing_local(url) is not None else url
+    stored_url = str(expand(url).resolve()) if _is_existing_local(url) is not None else url
     record = {"type": detected, "url": stored_url, "ref": ref}
     state["sources"][key] = record
     save_state(state)

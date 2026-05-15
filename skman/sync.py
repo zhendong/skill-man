@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -10,9 +11,16 @@ from .util import (
     read_skill_meta,
     save_state,
     skill_state_key,
+    source_basename,
 )
 
 _SKIP_DIRS = {".git", "node_modules", ".venv", "__pycache__", ".pytest_cache"}
+_SLUG_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _safe_slug(s: str) -> str | None:
+    s = (s or "").strip()
+    return s if s and _SLUG_RE.match(s) else None
 
 
 def _discover_skills_in(root: Path) -> list[Path]:
@@ -82,10 +90,21 @@ def sync_source(key: str) -> list[str]:
 
     discovered: list[str] = []
     for sd in _discover_skills_in(scan_root):
-        slug = sd.name
+        meta = read_skill_meta(sd)
+        slug = source_basename(key) if sd == src_path else sd.name
+        # "skills" is the convention container dir — too generic to be a useful
+        # slug. Prefer frontmatter `name:` (when filesystem-safe), else fall
+        # back to <parent-segment>-skills derived from the canonical URL.
+        if slug == "skills":
+            meta_safe = _safe_slug(meta.get("name", ""))
+            if meta_safe and meta_safe != "skills":
+                slug = meta_safe
+            else:
+                parent = Path(key).parent.name
+                if parent:
+                    slug = f"{parent}-skills"
         state_key = skill_state_key(slug, key)
         rel_in_source = sd.relative_to(src_path).as_posix()
-        meta = read_skill_meta(sd)
         now = now_iso()
         existing = state["skills"].get(state_key)
         state["skills"][state_key] = {
