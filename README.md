@@ -10,11 +10,14 @@ agent that discovers skills from `~/.agents/skills` or `~/.claude/skills`).
 3. **Symlink** every managed skill into both `~/.agents/skills` and
    `~/.claude/skills`. The dirs are created on first sync — nothing to set up
    beforehand.
-4. **Track state** in `~/.skman/state.json`: name, description, source,
-   short commit id, install time, and last-sync time per skill.
-5. **Enforce uniqueness** by comparing `(name, description)` across sources;
-   warn (don't silently overwrite) when two SKILL.md files claim the same
-   identity.
+4. **Track state** in `~/.skman/state.json`: slug, name, description,
+   source, short commit id, install/last-sync times, and enabled flag
+   per skill.
+5. **Disambiguate** skills from different sources by suffixing each
+   symlink with a short id derived from the source URL, so two sources
+   shipping the same skill name coexist without collision. A warning is
+   still printed when `(name, description)` matches across sources, so
+   you can spot true duplicates.
 6. **Record usage** via a Claude Code `PreToolUse` hook and show aggregate
    stats.
 
@@ -100,35 +103,45 @@ Everything lives in one JSON file: `~/.skman/state.json`.
     "superpowers": { "type": "git", "url": "...", "ref": "main" }
   },
   "skills": {
-    "brainstorming": {
+    "brainstorming-ab12cd": {
+      "slug": "brainstorming",
       "name": "brainstorming",
       "description": "You MUST use this before any creative work...",
       "source": "superpowers",
       "path": "skills/brainstorming",
       "commit": "a1b2c3d",
       "installed_at": "2026-05-14T10:00:00+00:00",
-      "updated_at": "2026-05-14T12:00:00+00:00"
+      "updated_at": "2026-05-14T12:00:00+00:00",
+      "enabled": true
     }
   }
 }
 ```
 
-`skman list` renders this as a table:
+The map key (`brainstorming-ab12cd`) is also the symlink name in the
+target dirs. The `-ab12cd` suffix is a 6-char hash of the source URL —
+it lets two sources share a slug without collision.
+
+`skman list` renders the state as a table:
 
 ```
-SLUG              SOURCE       COMMIT   INSTALLED         UPDATED
-brainstorming     superpowers  a1b2c3d  2026-05-14 10:00  2026-05-14 12:00
-tdd               superpowers  a1b2c3d  2026-05-14 10:00  2026-05-14 12:00
+LINK NAME             SLUG           SOURCE       COMMIT   STATUS    INSTALLED         UPDATED
+brainstorming-ab12cd  brainstorming  superpowers  a1b2c3d  enabled   2026-05-14 10:00  2026-05-14 12:00
+tdd-ab12cd            tdd            superpowers  a1b2c3d  enabled   2026-05-14 10:00  2026-05-14 12:00
 ```
 
 ## Duplicate detection
 
 After every sync, skman groups skills by `(name, description)` from their
-SKILL.md frontmatter. If any pair appears in more than one skill folder, a
-warning is printed naming the offending slugs and their sources — for
-example, when two sources both ship a `brainstorming` skill under different
-folder names. Nothing is silently dropped; resolve by removing one of the
-sources (or the duplicate folder upstream).
+SKILL.md frontmatter and prints a warning when any pair appears in more
+than one state entry — e.g. when two sources both ship a `brainstorming`
+skill with identical frontmatter.
+
+The warning is informational: both skills remain installed. Symlink names
+include a short id derived from the source URL (`brainstorming-ab12cd`,
+`brainstorming-ef34gh`), so there's no collision at the filesystem level.
+Resolve true duplicates by removing one of the sources, or by disabling
+one with `skman disable <link-name>`.
 
 ## Stats
 
@@ -149,13 +162,25 @@ skman stats --skill brainstorming
 
 ```
 skman paths
-skman source     add <url> | remove <slug-or-url> | list
+skman source     add <url> [skills-to-enable] | remove <slug-or-url> | list
 skman sync       [--source NAME | --skill SLUG]
 skman list
 skman refresh
+skman enable     <skill>
+skman disable    <skill>
 skman stats      [--days N] [--skill SLUG]
 skman hook
 skman install-hook [--write]
+```
+
+`skills-to-enable` is an optional comma-separated whitelist of skill
+slugs. When set, only those skills are enabled after sync; the rest are
+recorded in state but left disabled (no symlink). Examples:
+
+```bash
+skman source add https://github.com/obra/superpowers.git              # enable everything in the source
+skman source add https://github.com/obra/superpowers.git brainstorming,tdd
+                                                                      # enable only those two; others stay disabled
 ```
 
 ### Environment overrides (advanced)
@@ -163,3 +188,12 @@ skman install-hook [--write]
 - `SKMAN_ROOT` — state dir (default `~/.skman`)
 - `SKMAN_TARGET_DIRS` — colon-separated list of agent skill dirs
   (default `~/.agents/skills:~/.claude/skills`). Mainly used by tests.
+- `SKMAN_GITHUB_MIRROR` — rewrite GitHub clone URLs through a mirror
+  (useful in regions where `github.com` is slow or blocked). Two forms:
+    - **Hostname** (e.g. `hub.fastgit.org`) — replaces `github.com` in
+      the URL. `git@github.com:o/r` is converted to HTTPS first, so SSH
+      sources work too.
+    - **Full URL** (e.g. `https://ghproxy.com`) — treated as a prefix;
+      the original `https://github.com/o/r` URL is appended.
+  The original `url` recorded in `state.json` is unchanged; the mirror
+  only applies at clone/fetch time, and sync prints the rewritten URL.
