@@ -1,15 +1,17 @@
 # skman
 
-A CLI for managing skills used by coding agents (Claude Code and any other
-agent that discovers skills from `~/.agents/skills` or `~/.claude/skills`).
+A dead simple CLI for managing skills used by coding agents — works with **Claude Code**,
+**Codex CLI**, and any other agent that discovers skills from `~/.agents/skills`
+(the cross-agent dir; also where `skills.sh` / `npx skills` installs).
 
 ## What it does
 
 1. **Download** skills from git repos (or local directories).
 2. **Sync** them on demand — pulls upstream, refreshes state, updates symlinks.
-3. **Symlink** every managed skill into both `~/.agents/skills` and
-   `~/.claude/skills`. The dirs are created on first sync — nothing to set up
-   beforehand.
+3. **Symlink** every managed skill into `~/.agents/skills` and
+   `~/.claude/skills`. Codex picks the same skills up automatically via its
+   cross-agent fallback to `~/.agents/skills`. The dirs are created on first
+   sync — nothing to set up beforehand.
 4. **Track state** in `~/.skman/state.json`: slug, name, description,
    source, short commit id, install/last-sync times, and enabled flag
    per skill.
@@ -25,7 +27,30 @@ agent that discovers skills from `~/.agents/skills` or `~/.claude/skills`).
 
 ## Install
 
-Requires Python 3.10+ and `git`.
+### One-line install (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zhendong/skill-man/main/install.sh | sh
+```
+
+Works on macOS and Linux. The installer uses [uv](https://docs.astral.sh/uv/)
+to fetch a Python toolchain and install `skman` from PyPI into an isolated
+environment — you don't need Python or pip beforehand.
+
+Env overrides:
+- `SKMAN_FROM_GIT=1` — install from the GitHub repo instead of PyPI (and
+  `SKMAN_REF=<branch-or-tag>` to pick a ref).
+- `SKMAN_NO_UV=1` — fall back to `pipx`/`pip` instead of uv.
+
+### Via pip / pipx / uv
+
+```bash
+pipx install skman              # recommended for global CLI install
+uv tool install skman           # uv equivalent
+pip install --user skman        # plain pip
+```
+
+### From source
 
 ```bash
 cd skill-man   # repo dir keeps its name; the tool is `skman`
@@ -41,6 +66,25 @@ python3 -m skman <args>
 ```
 
 State lives in `~/.skman/` (override with `$SKMAN_ROOT`).
+
+### Windows
+
+There is no native Windows build. Use **WSL** (Windows Subsystem for Linux) —
+install a distro (Ubuntu/Debian/etc.), open its shell, and run the one-line
+install above from inside the Linux environment. Your agent CLI (Claude
+Code, Codex, etc.) should also run inside WSL so skman's symlinks land in
+the Linux home dir where the agent looks for them.
+
+## First-run setup
+
+After install, the fastest way to a working state is:
+
+```bash
+skman setup
+```
+
+This installs the Claude Code usage hook and migrates any skills already
+on disk (see below). It's safe to re-run.
 
 ## Quick start
 
@@ -158,10 +202,62 @@ skman stats --days 7
 skman stats --skill brainstorming
 ```
 
+## Migrating from other tools
+
+If you've been using Claude Code, Codex, or `skills.sh` (`npx skills …`),
+you'll likely have skills scattered across these dirs:
+
+- `~/.claude/skills/*` — Claude Code personal skills
+- `~/.codex/skills/*` — Codex personal skills (`.system/` is skipped — Codex
+  built-ins live there)
+- `~/.agents/skills/*` — cross-agent dir; also where `skills.sh` installs
+
+`skman migrate` walks those locations, looks for `SKILL.md` dirs that
+aren't already managed by skman, and adopts them:
+
+- Reads `~/.agents/.skill-lock.json` (skills.sh v3) when present and uses
+  the recorded `sourceUrl` — your `npx skills` installs become git sources
+  tracked by skman, deduplicating skills that share a repo.
+- Else, if the skill lives inside a git checkout, registers the enclosing
+  repo as a git source via its `origin`.
+- Else, copies the skill into `~/.skman/imported/<name>/` and registers
+  that as a local source.
+
+`skman migrate` refuses to overwrite skills you may have edited locally:
+
+- **In a git checkout** with uncommitted changes or unpushed commits →
+  skipped. Commit + push upstream, then re-run.
+- **In `~/.agents/skills/` with a `skillFolderHash`** in
+  `.skill-lock.json` (skills.sh v3) → the local folder's git tree SHA-1
+  is recomputed and compared. A mismatch means the folder was edited
+  after install; skman skips it. (Macros: `.DS_Store`, `__pycache__`,
+  `.git`, `node_modules` are filtered to avoid false positives.)
+
+In both cases skman tells you which skill, where it lives, and why —
+then leaves it alone. Resolve manually (commit/push, or revert your
+edits, or just don't manage it with skman) and re-run.
+
+After migration, skman manages the skill via its own suffixed symlinks
+(`brainstorming-ab12cd`) and removes the original loose copy so the host
+agent doesn't see both.
+
+```bash
+skman migrate --dry-run            # preview what would happen
+skman migrate                      # interactive (asks for confirmation)
+skman migrate --yes                # non-interactive
+skman migrate --keep-originals     # don't remove the on-disk copies after import
+skman migrate --scan ~/elsewhere   # scan an additional dir (repeatable)
+```
+
+`skman setup` runs `install-hook --write` followed by `migrate` and is the
+recommended first-run command.
+
 ## Commands
 
 ```
 skman paths
+skman setup      [--yes] [--keep-originals]
+skman migrate    [--dry-run] [--yes] [--keep-originals] [--scan PATH]
 skman source     add <url> [skills-to-enable] | remove <slug-or-url> | list
 skman sync       [--source NAME | --skill SLUG]
 skman list
@@ -197,3 +293,33 @@ skman source add https://github.com/obra/superpowers.git brainstorming,tdd
       the original `https://github.com/o/r` URL is appended.
   The original `url` recorded in `state.json` is unchanged; the mirror
   only applies at clone/fetch time, and sync prints the rewritten URL.
+
+## Publishing (maintainers)
+
+The version is read from `skman/__init__.py` (`__version__`). Bump it,
+commit, then build and upload:
+
+```bash
+# 1. Bump skman/__init__.py __version__ and commit
+# 2. Tag the release (optional but recommended)
+git tag v$(python3 -c "import skman; print(skman.__version__)")
+git push --tags
+
+# 3. Build
+python3 -m pip install --upgrade build twine
+rm -rf dist/ && python3 -m build           # produces dist/skman-X.Y.Z-py3-none-any.whl and .tar.gz
+
+# 4. Sanity-check the artifacts
+python3 -m twine check dist/*
+
+# 5. Upload to TestPyPI first, then PyPI
+python3 -m twine upload --repository testpypi dist/*
+python3 -m twine upload dist/*
+```
+
+Configure credentials in `~/.pypirc` (or use API tokens via
+`TWINE_USERNAME=__token__ TWINE_PASSWORD=<pypi-token>`).
+
+## License
+
+[MIT](LICENSE).

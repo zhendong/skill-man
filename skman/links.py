@@ -9,8 +9,11 @@ from .util import ensure, load_state, skill_path, sources_dir
 def target_dirs() -> list[Path]:
     """Where managed skills get symlinked.
 
-    Defaults to ~/.agents/skills and ~/.claude/skills. Override with the
+    Defaults: ~/.agents/skills, ~/.claude/skills. Override with the
     SKMAN_TARGET_DIRS env var (colon-separated); used by tests.
+
+    Codex deliberately omitted: it discovers skills from ~/.agents/skills as
+    its cross-agent fallback, so linking there is enough.
     """
     override = os.environ.get("SKMAN_TARGET_DIRS")
     if override:

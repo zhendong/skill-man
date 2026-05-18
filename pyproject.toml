@@ -1,9 +1,41 @@
 [project]
 name = "skman"
-version = "0.1.0"
-description = "Manage and sync coding-agent skills with pluggable user patches"
+dynamic = ["version"]
+description = "Manage and sync coding-agent skills (Claude Code, Codex, skills.sh)"
+readme = "README.md"
 requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "Zhendong Liu", email = "lzd110@gmail.com" }]
+keywords = [
+  "claude-code",
+  "codex",
+  "agent-skills",
+  "skills.sh",
+  "cli",
+  "ai-agents",
+  "developer-tools",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development",
+  "Topic :: Utilities",
+]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/zhendong/skill-man"
+Repository = "https://github.com/zhendong/skill-man"
+Issues = "https://github.com/zhendong/skill-man/issues"
 
 [project.scripts]
 skman = "skman.cli:main"
@@ -12,5 +44,21 @@ skman = "skman.cli:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.version]
+path = "skman/__init__.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["skman"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "skman/",
+  "tests/",
+  "README.md",
+  "LICENSE",
+  "install.sh",
+  "pyproject.toml",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

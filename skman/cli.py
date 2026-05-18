@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from . import links, sources, stats
+from . import links, migrate as migrate_mod, sources, stats
 from . import sync as sync_mod
 from .util import fmt_ts, load_state, save_state
 
@@ -116,6 +116,29 @@ def cmd_paths(args):
         print(f"  {d}")
 
 
+def cmd_migrate(args):
+    extra = [Path(p).expanduser() for p in (args.scan or [])]
+    migrate_mod.migrate(
+        dry_run=args.dry_run,
+        yes=args.yes,
+        keep_originals=args.keep_originals,
+        extra_paths=extra,
+    )
+
+
+def cmd_setup(args):
+    """One-shot first-run: install the usage hook, then migrate existing skills."""
+    print("== installing Claude Code usage hook ==")
+    cmd_install_hook(argparse.Namespace(write=True))
+    print("\n== migrating skills already on disk ==")
+    migrate_mod.migrate(
+        dry_run=False,
+        yes=args.yes,
+        keep_originals=args.keep_originals,
+        extra_paths=[],
+    )
+
+
 def cmd_install_hook(args):
     entry = {
         "matcher": "Skill",
@@ -197,6 +220,30 @@ def build_parser() -> argparse.ArgumentParser:
     p = sp.add_parser("install-hook", help="show or write Claude Code settings.json hook entry")
     p.add_argument("--write", action="store_true")
     p.set_defaults(func=cmd_install_hook)
+
+    p = sp.add_parser(
+        "migrate",
+        help="import skills already on disk (Claude Code, Codex, skills.sh) into skman",
+    )
+    p.add_argument("--dry-run", action="store_true",
+                   help="show what would be migrated without making changes")
+    p.add_argument("--yes", "-y", action="store_true",
+                   help="skip the confirmation prompt")
+    p.add_argument("--keep-originals", action="store_true",
+                   help="don't remove the original on-disk dirs after import")
+    p.add_argument("--scan", action="append", metavar="PATH",
+                   help="extra directory to scan; repeatable")
+    p.set_defaults(func=cmd_migrate)
+
+    p = sp.add_parser(
+        "setup",
+        help="one-shot: install the usage hook + migrate skills already on disk",
+    )
+    p.add_argument("--yes", "-y", action="store_true",
+                   help="skip the confirmation prompt during migrate")
+    p.add_argument("--keep-originals", action="store_true",
+                   help="don't remove originals after import")
+    p.set_defaults(func=cmd_setup)
 
     return ap
 
