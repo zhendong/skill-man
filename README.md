@@ -1,5 +1,7 @@
 # skman
 
+> 中文版:[README.zh-CN.md](README.zh-CN.md)
+
 A dead simple CLI for managing skills used by coding agents — works with **Claude Code**,
 **Codex CLI**, and any other agent that discovers skills from `~/.agents/skills`
 (the cross-agent dir; also where `skills.sh` / `npx skills` installs).
