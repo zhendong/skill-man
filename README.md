@@ -214,6 +214,11 @@ you'll likely have skills scattered across these dirs:
   built-ins live there)
 - `~/.agents/skills/*` — cross-agent dir; also where `skills.sh` installs
 
+Symlinked entries inside those dirs are skipped — only real on-disk skill
+directories are migrated. This avoids double-migrating cross-agent symlinks
+(e.g. `~/.codex/skills/foo → ~/.claude/skills/foo`); the real copy gets
+picked up from wherever it actually lives.
+
 `skman migrate` walks those locations, looks for `SKILL.md` dirs that
 aren't already managed by skman, and adopts them:
 

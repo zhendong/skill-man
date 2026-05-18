@@ -208,6 +208,11 @@ skman stats --skill brainstorming
   那是 Codex 内置 skill 的位置)
 - `~/.agents/skills/*` —— 跨 Agent 通用目录;`skills.sh` 也安装到这里
 
+上述目录中的符号链接条目会被跳过 —— 只迁移真实的 skill 目录。这样
+可以避免重复迁移跨 Agent 的符号链接(例如
+`~/.codex/skills/foo → ~/.claude/skills/foo`);真实拷贝会在它实际
+所在的位置被识别。
+
 `skman migrate` 会遍历上述位置,查找尚未被 skman 管理的 `SKILL.md`
 目录,并将其纳入管理:
 

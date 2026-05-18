@@ -253,7 +253,10 @@ def discover(extra_paths: list[Path]) -> list[dict]:
                 continue
             if not (entry / "SKILL.md").exists():
                 continue
-            if _is_managed_symlink(entry):
+            # Skip symlinks entirely — only migrate real on-disk skill dirs.
+            # Cross-agent symlinks (e.g. ~/.codex/skills/foo → ~/.claude/skills/foo)
+            # would otherwise cause double migration of the same skill.
+            if entry.is_symlink():
                 continue
             target = entry.resolve()
             if target in managed_paths or target in seen:
