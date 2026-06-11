@@ -50,7 +50,7 @@ def hook_entrypoint() -> None:
 def show_stats(days: int = 30, skill: str | None = None) -> None:
     log = usage_log()
     if not log.exists():
-        print("(no usage data yet — install the hook with `skman install-hook --write`)")
+        print("(no usage data yet - install hooks with `skman install-hook --write`)")
         return
     cutoff = time.time() - days * 86400
     events = []
@@ -67,9 +67,9 @@ def show_stats(days: int = 30, skill: str | None = None) -> None:
             events.append(e)
 
     state = load_state()
-    # Claude Code identifies a skill by its folder name in the agent's
-    # discovery dir, which is exactly our state key. Disabled skills have
-    # no symlink, so they aren't "managed" for stats purposes.
+    # Agents identify a skill by its folder name in the discovery dir, which
+    # is exactly our state key. Disabled skills have no symlink, so they
+    # aren't "managed" for stats purposes.
     managed_keys = {k for k, info in state.get("skills", {}).items()
                     if info.get("enabled", True)}
 

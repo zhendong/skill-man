@@ -127,9 +127,9 @@ def cmd_migrate(args):
 
 
 def cmd_setup(args):
-    """One-shot first-run: install the usage hook, then migrate existing skills."""
-    print("== installing Claude Code usage hook ==")
-    cmd_install_hook(argparse.Namespace(write=True))
+    """One-shot first-run: install usage hooks, then migrate existing skills."""
+    print("== installing usage hooks ==")
+    cmd_install_hook(argparse.Namespace(write=True, agent="all"))
     print("\n== migrating skills already on disk ==")
     migrate_mod.migrate(
         dry_run=False,
@@ -139,23 +139,41 @@ def cmd_setup(args):
     )
 
 
-def cmd_install_hook(args):
-    entry = {
+def _claude_hook_entry() -> dict:
+    return {
         "matcher": "Skill",
         "hooks": [{"type": "command", "command": "skman hook"}],
     }
-    if args.write:
+
+
+def _codex_hook_entry() -> dict:
+    return {
+        "matcher": "^Skill$",
+        "hooks": [{"type": "command", "command": "skman hook"}],
+    }
+
+
+def _load_json_config(path: Path) -> dict:
+    cfg = {}
+    if path.exists():
+        text = path.read_text() or "{}"
+        try:
+            cfg = json.loads(text)
+        except json.JSONDecodeError:
+            raise SystemExit(
+                f"{path} is not valid JSON; not modifying. Merge the hook manually."
+            )
+    return cfg
+
+
+def _install_claude_hook(write: bool) -> None:
+    entry = _claude_hook_entry()
+    if write:
         settings = Path("~/.claude/settings.json").expanduser()
-        settings.parent.mkdir(parents=True, exist_ok=True)
-        cfg = {}
-        if settings.exists():
-            text = settings.read_text() or "{}"
-            try:
-                cfg = json.loads(text)
-            except json.JSONDecodeError:
-                raise SystemExit(
-                    f"{settings} is not valid JSON; not modifying. Merge the hook manually."
-                )
+        if not settings.parent.exists():
+            print(f"skipped Claude Code hook: {settings.parent} does not exist")
+            return
+        cfg = _load_json_config(settings)
         hooks = cfg.setdefault("hooks", {})
         pre = hooks.setdefault("PreToolUse", [])
         already = any(
@@ -172,7 +190,45 @@ def cmd_install_hook(args):
     else:
         print(json.dumps({"hooks": {"PreToolUse": [entry]}}, indent=2))
         print("\nMerge the above into ~/.claude/settings.json,")
-        print("or run `skman install-hook --write` to do it automatically.")
+        print("or run `skman install-hook --agent claude --write` to do it automatically.")
+
+
+def _install_codex_hook(write: bool) -> None:
+    entry = _codex_hook_entry()
+    if write:
+        hooks_path = Path("~/.codex/hooks.json").expanduser()
+        if not hooks_path.parent.exists():
+            print(f"skipped Codex hook: {hooks_path.parent} does not exist")
+            return
+        cfg = _load_json_config(hooks_path)
+        hooks = cfg.setdefault("hooks", {})
+        pre = hooks.setdefault("PreToolUse", [])
+        already = any(
+            e.get("matcher") == "^Skill$"
+            and any(h.get("command") == "skman hook" for h in e.get("hooks", []))
+            for e in pre
+        )
+        if already:
+            print(f"hook already present in {hooks_path}")
+            return
+        pre.append(entry)
+        hooks_path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
+        print(f"installed PreToolUse Skill hook into {hooks_path}")
+    else:
+        print(json.dumps({"hooks": {"PreToolUse": [entry]}}, indent=2))
+        print("\nMerge the above into ~/.codex/hooks.json,")
+        print("or run `skman install-hook --agent codex --write` to do it automatically.")
+
+
+def cmd_install_hook(args):
+    agents = ("claude", "codex") if args.agent == "all" else (args.agent,)
+    for i, agent in enumerate(agents):
+        if i:
+            print()
+        if agent == "claude":
+            _install_claude_hook(args.write)
+        elif agent == "codex":
+            _install_codex_hook(args.write)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -215,9 +271,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--skill")
     p.set_defaults(func=cmd_stats)
 
-    sp.add_parser("hook", help="hook entrypoint (reads Claude Code hook JSON from stdin)").set_defaults(func=cmd_hook)
+    sp.add_parser("hook", help="hook entrypoint (reads agent hook JSON from stdin)").set_defaults(func=cmd_hook)
 
-    p = sp.add_parser("install-hook", help="show or write Claude Code settings.json hook entry")
+    p = sp.add_parser("install-hook", help="show or write agent hook config entries")
+    p.add_argument("--agent", choices=("claude", "codex", "all"), default="all",
+                   help="which agent config to target (default: all)")
     p.add_argument("--write", action="store_true")
     p.set_defaults(func=cmd_install_hook)
 

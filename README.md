@@ -22,8 +22,8 @@ A dead simple CLI for managing skills used by coding agents — works with **Cla
    shipping the same skill name coexist without collision. A warning is
    still printed when `(name, description)` matches across sources, so
    you can spot true duplicates.
-6. **Record usage** via a Claude Code `PreToolUse` hook and show aggregate
-   stats.
+6. **Record usage** via Claude Code and Codex `PreToolUse` hooks and show
+   aggregate stats.
 
 > Note: pluggable user-edits-as-patches is intentionally out of scope for now.
 
@@ -85,8 +85,8 @@ After install, the fastest way to a working state is:
 skman setup
 ```
 
-This installs the Claude Code usage hook and migrates any skills already
-on disk (see below). It's safe to re-run.
+This installs usage hooks for any configured agents it finds and migrates
+any skills already on disk (see below). It's safe to re-run.
 
 ## Quick start
 
@@ -191,8 +191,11 @@ one with `skman disable <link-name>`.
 
 ## Stats
 
-`skman install-hook --write` adds a Claude Code `PreToolUse` hook so
-every Skill tool call is recorded to `~/.skman/stats/usage.jsonl`.
+`skman install-hook --write` adds `PreToolUse` hooks for Claude Code and
+Codex when their config directories exist. Missing agent config directories
+are reported and skipped, so the command is safe on machines that only have
+one of the agents installed. Every Skill tool call is recorded to
+`~/.skman/stats/usage.jsonl`.
 `skman stats` aggregates:
 
 - per-skill invocation count, distinct sessions, last-used time
@@ -273,7 +276,7 @@ skman enable     <skill>
 skman disable    <skill>
 skman stats      [--days N] [--skill SLUG]
 skman hook
-skman install-hook [--write]
+skman install-hook [--agent claude|codex|all] [--write]
 ```
 
 `skills-to-enable` is an optional comma-separated whitelist of skill

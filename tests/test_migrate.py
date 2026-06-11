@@ -527,6 +527,11 @@ def test_setup_runs_install_hook_and_migrate():
             e.get("matcher") == "Skill"
             for e in cfg.get("hooks", {}).get("PreToolUse", [])
         )
+        codex_cfg = json.loads((home / ".codex" / "hooks.json").read_text())
+        assert any(
+            e.get("matcher") == "^Skill$"
+            for e in codex_cfg.get("hooks", {}).get("PreToolUse", [])
+        )
 
         # Migrate ran
         state = json.loads((home / ".skman" / "state.json").read_text())

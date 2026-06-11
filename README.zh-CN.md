@@ -19,8 +19,8 @@
    来源 URL 派生出的短 id,使两个来源的同名 skill 可以共存。
    当 `(name, description)` 在多个来源中完全一致时,仍会打印警告,
    方便你发现真正的重复项。
-6. **记录使用情况**:通过 Claude Code 的 `PreToolUse` 钩子记录调用,
-   并提供聚合统计。
+6. **记录使用情况**:通过 Claude Code 和 Codex 的 `PreToolUse` 钩子
+   记录调用,并提供聚合统计。
 
 > 注意:用户编辑作为 patch 应用的能力目前不在范围内。
 
@@ -82,7 +82,7 @@ python3 -m skman <args>
 skman setup
 ```
 
-这会安装 Claude Code 的使用记录钩子,并把磁盘上已有的 skill 迁移过来
+这会为已配置的 Agent 安装使用记录钩子,并把磁盘上已有的 skill 迁移过来
 (详见下文)。重复执行是安全的。
 
 ## 快速开始
@@ -185,8 +185,11 @@ tdd-ab12cd            tdd            superpowers  a1b2c3d  enabled   2026-05-14 
 
 ## 统计
 
-`skman install-hook --write` 会向 Claude Code 注册一个 `PreToolUse`
-钩子,让每次 Skill 工具调用都被记录到 `~/.skman/stats/usage.jsonl`。
+`skman install-hook --write` 会为 Claude Code 和 Codex 注册
+`PreToolUse` 钩子(仅当对应 Agent 的配置目录存在时)。缺少某个
+Agent 的配置目录时会提示并跳过,所以只安装了其中一个 Agent 的机器上
+也可以安全运行。每次 Skill 工具调用都会记录到
+`~/.skman/stats/usage.jsonl`。
 `skman stats` 进行聚合:
 
 - 每个 skill 的调用次数、独立会话数、最近一次使用时间
@@ -266,7 +269,7 @@ skman enable     <skill>
 skman disable    <skill>
 skman stats      [--days N] [--skill SLUG]
 skman hook
-skman install-hook [--write]
+skman install-hook [--agent claude|codex|all] [--write]
 ```
 
 `skills-to-enable` 是一个可选的、用逗号分隔的 skill slug 白名单。

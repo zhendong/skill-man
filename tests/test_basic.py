@@ -282,6 +282,7 @@ def test_install_hook_write_idempotent_and_safe():
             "HOME": str(home),
             "SKMAN_ROOT": str(tmp / "state"),
         }
+        (home / ".claude").mkdir(parents=True)
         # First write
         r = run("install-hook", "--write", env=env)
         assert r.returncode == 0, r.stderr
@@ -315,6 +316,79 @@ def test_install_hook_write_idempotent_and_safe():
         assert r.returncode != 0
         assert "not valid JSON" in r.stderr
         assert settings_path.read_text() == "not json {{{"
+
+
+def test_install_hook_codex_write_idempotent_and_safe():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        home = tmp / "home"
+        env = {
+            "HOME": str(home),
+            "SKMAN_ROOT": str(tmp / "state"),
+        }
+        (home / ".codex").mkdir(parents=True)
+        r = run("install-hook", "--agent", "codex", "--write", env=env)
+        assert r.returncode == 0, r.stderr
+        hooks_path = home / ".codex" / "hooks.json"
+        cfg = json.loads(hooks_path.read_text())
+        pre = cfg["hooks"]["PreToolUse"]
+        assert len(pre) == 1
+        assert pre[0]["matcher"] == "^Skill$"
+        assert pre[0]["hooks"][0]["command"] == "skman hook"
+
+        r = run("install-hook", "--agent", "codex", "--write", env=env)
+        assert r.returncode == 0, r.stderr
+        assert "already present" in r.stdout
+        cfg = json.loads(hooks_path.read_text())
+        assert len(cfg["hooks"]["PreToolUse"]) == 1
+
+        cfg["hooks"].setdefault("PostToolUse", []).append(
+            {"matcher": "^Bash$", "hooks": [{"type": "command", "command": "echo other"}]}
+        )
+        hooks_path.write_text(json.dumps(cfg))
+        r = run("install-hook", "--agent", "codex", "--write", env=env)
+        assert r.returncode == 0, r.stderr
+        cfg2 = json.loads(hooks_path.read_text())
+        assert len(cfg2["hooks"]["PostToolUse"]) == 1
+        assert len(cfg2["hooks"]["PreToolUse"]) == 1
+
+        hooks_path.write_text("not json {{{")
+        r = run("install-hook", "--agent", "codex", "--write", env=env)
+        assert r.returncode != 0
+        assert "not valid JSON" in r.stderr
+        assert hooks_path.read_text() == "not json {{{"
+
+
+def test_install_hook_all_writes_both_agents():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        home = tmp / "home"
+        env = {
+            "HOME": str(home),
+            "SKMAN_ROOT": str(tmp / "state"),
+        }
+        (home / ".claude").mkdir(parents=True)
+        (home / ".codex").mkdir(parents=True)
+        r = run("install-hook", "--agent", "all", "--write", env=env)
+        assert r.returncode == 0, r.stderr
+        assert (home / ".claude" / "settings.json").exists()
+        assert (home / ".codex" / "hooks.json").exists()
+
+
+def test_install_hook_reports_missing_agent_config_dirs():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        home = tmp / "home"
+        env = {
+            "HOME": str(home),
+            "SKMAN_ROOT": str(tmp / "state"),
+        }
+        r = run("install-hook", "--write", env=env)
+        assert r.returncode == 0, r.stderr
+        assert "skipped Claude Code hook" in r.stdout
+        assert "skipped Codex hook" in r.stdout
+        assert not (home / ".claude" / "settings.json").exists()
+        assert not (home / ".codex" / "hooks.json").exists()
 
 
 def test_source_add_with_skill_whitelist():
@@ -604,5 +678,8 @@ if __name__ == "__main__":
     test_generic_skills_slug_falls_back()
     test_hook_records_and_stats_identifies_managed()
     test_install_hook_write_idempotent_and_safe()
+    test_install_hook_codex_write_idempotent_and_safe()
+    test_install_hook_all_writes_both_agents()
+    test_install_hook_reports_missing_agent_config_dirs()
     test_end_to_end_with_auto_sync_and_suffixed_links()
     print("OK")
