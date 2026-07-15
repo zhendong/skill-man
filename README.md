@@ -309,8 +309,22 @@ skman source add https://github.com/obra/superpowers.git brainstorming,tdd
 
 ## Publishing (maintainers)
 
-The version is read from `skman/__init__.py` (`__version__`). Bump it,
-commit, then build and upload:
+The version is read from `skman/__init__.py` (`__version__`).
+
+### Via GitHub Actions (recommended)
+
+Bump `skman/__init__.py`'s `__version__`, commit, and push. Then go to
+**Actions → Publish to PyPI → Run workflow** and enter the version you
+just set. The workflow runs the test suite, builds the sdist/wheel,
+verifies the version matches, and publishes to PyPI using [trusted
+publishing](https://docs.pypi.org/trusted-publishers/) (no stored
+tokens).
+
+One-time setup: on the PyPI project's *Publishing* settings, add a
+trusted publisher with owner `zhendong`, repository `skill-man`,
+workflow `publish.yml`, and environment `pypi`.
+
+### Manually
 
 ```bash
 # 1. Bump skman/__init__.py __version__ and commit

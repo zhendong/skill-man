@@ -302,8 +302,21 @@ skman source add https://github.com/obra/superpowers.git brainstorming,tdd
 
 ## 发布(给维护者)
 
-版本号从 `skman/__init__.py` 中的 `__version__` 读取。先 bump,
-提交,然后构建并上传:
+版本号从 `skman/__init__.py` 中的 `__version__` 读取。
+
+### 通过 GitHub Actions(推荐)
+
+修改 `skman/__init__.py` 中的 `__version__`,提交并 push。然后打开
+**Actions → Publish to PyPI → Run workflow**,输入刚设置的版本号。
+该 workflow 会先跑测试、构建 sdist/wheel、校验版本号是否一致,
+再通过 [trusted publishing](https://docs.pypi.org/trusted-publishers/)
+发布到 PyPI(无需存储 token)。
+
+一次性设置:在 PyPI 项目的 *Publishing* 设置中添加一个 trusted
+publisher,owner 填 `zhendong`,repository 填 `skill-man`,workflow
+填 `publish.yml`,environment 填 `pypi`。
+
+### 手动发布
 
 ```bash
 # 1. 修改 skman/__init__.py 中的 __version__ 并提交
