@@ -95,6 +95,8 @@ skman source add https://github.com/obra/superpowers.git           # slug auto-d
 skman sync                                              # clones, finds SKILL.md files, links into both target dirs
 
 skman list                                              # see what's managed (with install/update times + commit)
+skman show brainstorming                                # see a skill's description
+skman show brainstorming --all                          # see the full SKILL.md content
 skman install-hook --write                              # records skill invocations
 skman stats                                              # see what got used
 ```
@@ -272,6 +274,7 @@ skman source     add <url> [skills-to-enable] | remove <slug-or-url> | list
 skman sync       [--source NAME | --skill SLUG]
 skman list
 skman refresh
+skman show       <skill> [-a | --all]
 skman enable     <skill>
 skman disable    <skill>
 skman stats      [--days N] [--skill SLUG]

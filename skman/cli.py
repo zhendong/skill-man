@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from . import links, migrate as migrate_mod, sources, stats
+from . import links, migrate as migrate_mod, show as show_mod, sources, stats
 from . import sync as sync_mod
 from .util import fmt_ts, load_state, save_state
 
@@ -71,6 +71,10 @@ def cmd_list(args):
 
 def cmd_refresh(args):
     links.refresh_links()
+
+
+def cmd_show(args):
+    show_mod.show_skill(args.skill, show_all=args.all)
 
 
 def _set_enabled(skill_arg: str, enabled: bool) -> None:
@@ -260,6 +264,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp.add_parser("list", help="list managed skills with install/update times").set_defaults(func=cmd_list)
     sp.add_parser("refresh", help="re-create symlinks for every enabled skill").set_defaults(func=cmd_refresh)
+
+    p = sp.add_parser("show", help="show a skill's description")
+    p.add_argument("skill")
+    p.add_argument("-a", "--all", action="store_true",
+                   help="show the full SKILL.md content, not just the description")
+    p.set_defaults(func=cmd_show)
 
     p = sp.add_parser("enable", help="enable a skill (re-create its symlink)")
     p.add_argument("skill"); p.set_defaults(func=cmd_enable)

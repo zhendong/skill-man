@@ -504,6 +504,46 @@ def test_enable_disable_toggles_state_and_symlink():
         assert r.returncode != 0
 
 
+def test_show_default_and_all():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        env = {
+            "SKMAN_ROOT": str(tmp / "state"),
+            "SKMAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
+        }
+        repo = make_repo(tmp / "repo", {"foo": ("foo", "does foo things")})
+        r = run("source", "add", str(repo), env=env)
+        assert r.returncode == 0, r.stderr
+
+        r = run("show", "foo", env=env)
+        assert r.returncode == 0, r.stderr
+        assert "does foo things" in r.stdout
+        assert "SOURCE" in r.stdout and str(repo) in r.stdout
+        lines = r.stdout.splitlines()
+        assert not any(l.startswith("NAME") or l.startswith("SLUG") for l in lines)
+        assert "body for foo" not in r.stdout  # full content hidden by default
+
+        # PATH points at the on-disk skill dir (under the state root's source cache)
+        path_line = next(l for l in r.stdout.splitlines() if l.startswith("PATH"))
+        assert str(tmp / "state" / "sources") in path_line
+        assert path_line.rstrip().endswith("foo")
+
+        r = run("show", "foo", "--all", env=env)
+        assert r.returncode == 0, r.stderr
+        assert "does foo things" in r.stdout
+        assert "body for foo" in r.stdout
+        assert "SKILL.md" in r.stdout
+        assert "name: foo" not in r.stdout  # raw frontmatter isn't dumped verbatim
+
+        r = run("show", "-a", "foo", env=env)
+        assert r.returncode == 0, r.stderr
+        assert "body for foo" in r.stdout
+
+        r = run("show", "nonexistent", env=env)
+        assert r.returncode != 0
+        assert "unknown skill" in r.stderr
+
+
 def test_stats_excludes_disabled_from_managed():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)

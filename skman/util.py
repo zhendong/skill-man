@@ -184,6 +184,18 @@ def parse_skill_frontmatter(text: str) -> dict:
     return out
 
 
+def split_frontmatter(text: str) -> tuple[dict, str]:
+    """Split a SKILL.md's raw text into (frontmatter dict, body text)."""
+    if not text.startswith("---"):
+        return {}, text
+    try:
+        end = text.index("\n---", 3)
+    except ValueError:
+        return {}, text
+    body = text[end + 4:].lstrip("\n")
+    return parse_skill_frontmatter(text), body
+
+
 def read_skill_meta(skill_dir: Path) -> dict:
     """Return {'name': ..., 'description': ...} from a skill's SKILL.md."""
     md = skill_dir / "SKILL.md"

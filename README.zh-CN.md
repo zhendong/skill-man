@@ -92,6 +92,8 @@ skman source add https://github.com/obra/superpowers.git           # slug 自动
 skman sync                                              # 克隆仓库、查找 SKILL.md、建立链接
 
 skman list                                              # 查看已管理的 skill(含安装/更新时间和 commit)
+skman show brainstorming                                # 查看某个 skill 的描述
+skman show brainstorming --all                          # 查看完整的 SKILL.md 内容
 skman install-hook --write                              # 记录 skill 调用
 skman stats                                             # 查看使用统计
 ```
@@ -265,6 +267,7 @@ skman source     add <url> [skills-to-enable] | remove <slug-or-url> | list
 skman sync       [--source NAME | --skill SLUG]
 skman list
 skman refresh
+skman show       <skill> [-a | --all]
 skman enable     <skill>
 skman disable    <skill>
 skman stats      [--days N] [--skill SLUG]
