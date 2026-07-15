@@ -30,7 +30,7 @@ classifiers = [
   "Topic :: Software Development",
   "Topic :: Utilities",
 ]
-dependencies = []
+dependencies = ["pyyaml>=6"]
 
 [project.urls]
 Homepage = "https://github.com/zhendong/skill-man"

@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+
+import yaml
 
 HOME = Path.home()
 
@@ -118,82 +121,46 @@ def fmt_ts(iso: str | None) -> str:
     return dt.astimezone().strftime("%Y-%m-%d %H:%M")
 
 
-def parse_skill_frontmatter(text: str) -> dict:
-    """Minimal YAML-ish frontmatter parser.
+_FRONTMATTER_FENCE = re.compile(r"^---[ \t]*$", re.MULTILINE)
 
-    Extracts top-level scalar keys (name, description, …). Handles
-    single-line strings and `|`/`>` block scalars. Nested mappings are
-    ignored (we only care about name/description).
-    """
+
+def _frontmatter_bounds(text: str) -> tuple[str, str] | None:
+    """Locate a leading `---`-fenced block; return (raw frontmatter, body) or None."""
     if not text.startswith("---"):
+        return None
+    first_nl = text.find("\n")
+    if first_nl == -1:
+        return None
+    m = _FRONTMATTER_FENCE.search(text, first_nl + 1)
+    if not m:
+        return None
+    return text[first_nl + 1:m.start()], text[m.end():].lstrip("\n")
+
+
+def parse_skill_frontmatter(text: str) -> dict:
+    """Parse a SKILL.md's YAML frontmatter into a dict."""
+    bounds = _frontmatter_bounds(text)
+    if bounds is None:
         return {}
+    front_text, _body = bounds
     try:
-        end = text.index("\n---", 3)
-    except ValueError:
+        data = yaml.safe_load(front_text)
+    except yaml.YAMLError:
         return {}
-    body = text[3:end].lstrip("\n")
-
-    out: dict[str, str] = {}
-    current_key: str | None = None
-    block_style: str | None = None
-    block_lines: list[str] = []
-    block_indent: int | None = None
-
-    def commit() -> None:
-        nonlocal current_key, block_lines, block_style, block_indent
-        if current_key is None:
-            return
-        if block_style == "|":
-            out[current_key] = "\n".join(block_lines).rstrip()
-        elif block_style == ">":
-            out[current_key] = " ".join(line.strip() for line in block_lines).strip()
-        current_key = None
-        block_style = None
-        block_lines = []
-        block_indent = None
-
-    for raw in body.splitlines():
-        if not raw.strip() and current_key and block_style:
-            block_lines.append("")
-            continue
-        if raw.startswith(" ") or raw.startswith("\t"):
-            if current_key and block_style:
-                if block_indent is None:
-                    block_indent = len(raw) - len(raw.lstrip())
-                block_lines.append(raw[block_indent:] if len(raw) >= block_indent else raw.lstrip())
-            continue
-        if raw.startswith("#") or not raw.strip():
-            continue
-        if ":" not in raw:
-            continue
-        commit()
-        key, _, val = raw.partition(":")
-        current_key = key.strip()
-        val = val.strip()
-        if val in ("|", ">"):
-            block_style = val
-            block_lines = []
-            block_indent = None
-        else:
-            if (len(val) >= 2 and val[0] == val[-1] and val[0] in ('"', "'")):
-                val = val[1:-1]
-            out[current_key] = val
-            current_key = None
-
-    commit()
-    return out
+    return data if isinstance(data, dict) else {}
 
 
 def split_frontmatter(text: str) -> tuple[dict, str]:
     """Split a SKILL.md's raw text into (frontmatter dict, body text)."""
-    if not text.startswith("---"):
+    bounds = _frontmatter_bounds(text)
+    if bounds is None:
         return {}, text
+    front_text, body = bounds
     try:
-        end = text.index("\n---", 3)
-    except ValueError:
-        return {}, text
-    body = text[end + 4:].lstrip("\n")
-    return parse_skill_frontmatter(text), body
+        data = yaml.safe_load(front_text)
+    except yaml.YAMLError:
+        data = None
+    return (data if isinstance(data, dict) else {}), body
 
 
 def read_skill_meta(skill_dir: Path) -> dict:
@@ -202,7 +169,9 @@ def read_skill_meta(skill_dir: Path) -> dict:
     if not md.exists():
         return {"name": skill_dir.name, "description": ""}
     front = parse_skill_frontmatter(md.read_text(errors="replace"))
+    name = front.get("name")
+    description = front.get("description")
     return {
-        "name": (front.get("name") or skill_dir.name).strip(),
-        "description": (front.get("description") or "").strip(),
+        "name": (str(name).strip() if name else skill_dir.name),
+        "description": (str(description).strip() if description else ""),
     }

@@ -704,6 +704,75 @@ def test_dirs_created_on_demand():
         assert len(state["skills"]) == 1
 
 
+def test_frontmatter_handles_block_scalar_chomping_indicators():
+    from skman.util import parse_skill_frontmatter
+
+    # (style, expected folded/literal body, whether the trailing newline survives)
+    cases = [
+        ("|", "line one\nline two", True),    # literal, clip
+        ("|-", "line one\nline two", False),  # literal, strip
+        ("|+", "line one\nline two", True),   # literal, keep
+        (">", "line one line two", True),     # folded, clip
+        (">-", "line one line two", False),   # folded, strip
+        (">+", "line one line two", True),    # folded, keep
+    ]
+    for style, expected, has_trailing_newline in cases:
+        text = f"---\nname: x\ndescription: {style}\n  line one\n  line two\n---\n\nbody\n"
+        front = parse_skill_frontmatter(text)
+        actual = front["description"]
+        assert actual.rstrip("\n") == expected, (style, actual)
+        assert actual.endswith("\n") == has_trailing_newline, (style, actual)
+
+
+def test_frontmatter_handles_multiline_quoted_plain_and_indented_block_scalars():
+    from skman.util import parse_skill_frontmatter
+
+    # multi-line double-quoted scalar (quote doesn't close on the first line)
+    text = '---\nname: x\ndescription: "line one\n  line two"\n---\n\nbody\n'
+    assert parse_skill_frontmatter(text)["description"] == "line one line two"
+
+    # plain (unquoted, no |/>) multi-line scalar, folded per YAML plain-scalar rules
+    text = "---\nname: x\ndescription: line one\n  line two\n---\n\nbody\n"
+    assert parse_skill_frontmatter(text)["description"] == "line one line two"
+
+    # explicit indentation indicator combined with a chomping indicator
+    text = "---\nname: x\ndescription: |2-\n  line one\n  line two\n---\n\nbody\n"
+    assert parse_skill_frontmatter(text)["description"] == "line one\nline two"
+
+
+def test_show_handles_folded_block_scalar_description():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        env = {
+            "SKMAN_ROOT": str(tmp / "state"),
+            "SKMAN_TARGET_DIRS": f"{tmp/'a'}:{tmp/'c'}",
+        }
+        repo = tmp / "repo"
+        sd = repo / "skills" / "foo"
+        sd.mkdir(parents=True)
+        (sd / "SKILL.md").write_text(
+            "---\n"
+            "name: foo\n"
+            "description: >-\n"
+            "  Does foo things across\n"
+            "  multiple wrapped lines.\n"
+            "---\n\nbody\n"
+        )
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                        "add", "-A"], cwd=repo, check=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                        "commit", "-q", "-m", "init"], cwd=repo, check=True)
+
+        r = run("source", "add", str(repo), env=env)
+        assert r.returncode == 0, r.stderr
+
+        r = run("show", "foo", env=env)
+        assert r.returncode == 0, r.stderr
+        assert "Does foo things across multiple wrapped lines." in r.stdout.replace("\n", " ")
+        assert ">-" not in r.stdout
+
+
 if __name__ == "__main__":
     test_url_canonicalization()
     test_github_mirror_rewriting()
